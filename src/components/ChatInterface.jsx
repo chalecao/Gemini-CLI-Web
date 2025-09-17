@@ -1464,6 +1464,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
 
         case 'gemini-response':
+        case 'codebuddy-response':
           { const messageData = latestMessage.data.message || latestMessage.data;
           // Handle Gemini CLI session duplication bug workaround:
           // When resuming a session, Gemini CLI creates a new session instead of resuming.
@@ -1569,6 +1570,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
           break; }
         case 'gemini-output':
+        case 'codebuddy-output':
           setChatMessages(prev => [...prev, {
             type: 'assistant',
             content: latestMessage.data,
@@ -1576,6 +1578,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }]);
           break;
         case 'gemini-interactive-prompt':
+        case 'codebuddy-interactive-prompt':
           // Handle interactive prompts from CLI
           setChatMessages(prev => [...prev, {
             type: 'assistant',
@@ -1585,6 +1588,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }]);
           break;
         case 'gemini-error':
+        case 'codebuddy-error':
           // console.log('Gemini error, setting isLoading to false:', latestMessage.error);
           setChatMessages(prev => [...prev, {
             type: 'error',
@@ -1596,6 +1600,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setGeminiStatus(null);
           break;
         case 'gemini-complete':
+        case 'codebuddy-complete':
           // console.log('Gemini completed, setting isLoading to false');
           { setIsLoading(false);
           setCanAbortSession(false);
@@ -1640,6 +1645,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
 
         case 'gemini-status':
+        case 'codebuddy-status':
           // Handle Gemini working status messages
           // Debug - Received gemini-status message
           { const statusData = latestMessage.data;
