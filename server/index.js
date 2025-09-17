@@ -39,6 +39,7 @@ import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { spawnGemini, abortGeminiSession } from './gemini-cli.js';
+import { spawnCodeBuddy, abortCodeBuddySession } from './codebuddy-cli.js';
 import sessionManager from './sessionManager.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
@@ -450,10 +451,18 @@ function handleChatConnection(ws) {
         // console.log('💬 User message:', data.command || '[Continue/Resume]');
         // console.log('📁 Project:', data.options?.projectPath || 'Unknown');
         // console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
-        await spawnGemini(data.command, data.options, ws);
+        const cliName = process.env.CLI_NAME || 'gemini';
+        if (cliName === 'codebuddy') {
+          await spawnCodeBuddy(data.command, data.options, ws);
+        } else {
+          await spawnGemini(data.command, data.options, ws);
+        }
       } else if (data.type === 'abort-session') {
         // console.log('🛑 Abort session request:', data.sessionId);
-        const success = abortGeminiSession(data.sessionId);
+        const cliName = process.env.CLI_NAME || 'gemini';
+        const success = cliName === 'codebuddy' 
+          ? abortCodeBuddySession(data.sessionId)
+          : abortGeminiSession(data.sessionId);
         ws.send(JSON.stringify({
           type: 'session-aborted',
           sessionId: data.sessionId,
@@ -496,27 +505,33 @@ function handleShellConnection(ws) {
           data: welcomeMsg
         }));
         try {
-          // Get gemini command from environment or use default
-          const geminiPath = process.env.GEMINI_PATH || 'gemini';
-          // First check if gemini CLI is available
+          // Get CLI command from environment or use default
+          const cliPath = process.env.CLI_PATH || (process.env.CLI_NAME === 'codebuddy' ? 'codebuddy' : 'gemini');
+          // First check if CLI is available
           try {
-            execSync(`which ${geminiPath}`, { stdio: 'ignore' });
+            execSync(`which ${cliPath}`, { stdio: 'ignore' });
           } catch (error) {
-            // console.error('❌ Gemini CLI not found in PATH or GEMINI_PATH');
+            const cliName = process.env.CLI_NAME || 'gemini';
+            const installCmd = cliName === 'codebuddy' 
+              ? 'npm install -g @google-gemini/codebuddy' 
+              : 'npm install -g @google/generative-ai-cli';
+            // console.error(`❌ ${cliName} CLI not found in PATH or CLI_PATH`);
             ws.send(JSON.stringify({
               type: 'output',
-              data: `\r\n\x1b[31mError: Gemini CLI not found. Please check:\x1b[0m\r\n\x1b[33m1. Install gemini globally: npm install -g @google/generative-ai-cli\x1b[0m\r\n\x1b[33m2. Or set GEMINI_PATH in .env file\x1b[0m\r\n`
+              data: `\r\n\x1b[31mError: ${cliName} CLI not found. Please check:\x1b[0m\r\n\x1b[33m1. Install ${cliName} globally: ${installCmd}\x1b[0m\r\n\x1b[33m2. Or set CLI_PATH in .env file\x1b[0m\r\n`
             }));
             return;
           }
           // Build shell command that changes to project directory first, then runs gemini
-          let geminiCommand = geminiPath;
+          const cliName = process.env.CLI_NAME || 'gemini';
+          let cliCommand = cliPath;
           if (hasSession && sessionId) {
             // Try to resume session, but with fallback to new session if it fails
-            geminiCommand = `${geminiPath} --resume ${sessionId} || ${geminiPath}`;
+            const resumeFlag = cliName === 'codebuddy' ? '-r' : '--resume';
+            cliCommand = `${cliPath} ${resumeFlag} ${sessionId} || ${cliPath}`;
           }
           // Create shell command that cds to the project directory first
-          const shellCommand = `cd "${projectPath}" && ${geminiCommand}`;
+          const shellCommand = `cd "${projectPath}" && ${cliCommand}`;
           // Start shell using PTY for proper terminal emulation
           shellProcess = pty.spawn('bash', ['-c', shellCommand], {
             name: 'xterm-256color',
